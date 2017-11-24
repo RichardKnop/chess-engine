@@ -1,49 +1,52 @@
 package engine
 
 import (
-	"fmt"
-
-	"github.com/RichardKnop/chess/engine/position"
-	"github.com/pborman/uuid"
+	"github.com/satori/go.uuid"
 )
-
-// Engine ...
-type Engine struct {
-	boards map[string]*Board
-}
 
 // New returns a new Engine instance
 func New() (*Engine, error) {
 	e := &Engine{
-		boards: make(map[string]*Board),
+		games: make(map[string]*Game),
 	}
 	return e, nil
 }
 
-// NewGame creates a new board with blank state
-func (e *Engine) NewGame(orient, pos string) (*Board, error) {
-	boardID := uuid.New()
-	_, ok := e.boards[boardID]
+// NewGame creates a new game with blank state
+func (e *Engine) NewGame(gameID, orientation, position string) (*Game, error) {
+	if gameID == "" {
+		gameID = uuid.NewV4().String()
+	}
+	_, ok := e.games[gameID]
+
+	// This should never happen (UUIDs should be unique) but just in case
 	if ok {
-		return nil, fmt.Errorf("Board %s already exists", boardID)
+		return nil, NewGameAlreadyExistsError(gameID)
 	}
-	if pos == "" {
-		pos = position.Initial
+
+	// Default to initial position if not specified
+	if position == "" {
+		position = InitialPosition
 	}
-	board, err := NewBoard(boardID, orient, pos)
+
+	// Create a new game
+	g, err := NewGame(gameID, orientation, position)
 	if err != nil {
 		return nil, err
 	}
-	e.boards[boardID] = board
-	go board.Run()
-	return board, nil
+	e.games[gameID] = g
+
+	// Run the game in a goroutine
+	go g.Run()
+
+	return g, nil
 }
 
-// GetBoard returns in memory board state
-func (e *Engine) GetBoard(boardID string) (*Board, error) {
-	board, ok := e.boards[boardID]
+// GetGame returns in memory game state
+func (e *Engine) GetGame(gameID string) (*Game, error) {
+	g, ok := e.games[gameID]
 	if !ok {
-		return nil, fmt.Errorf("Board %s does not exist", boardID)
+		return nil, NewGameNotFoundError(gameID)
 	}
-	return board, nil
+	return g, nil
 }

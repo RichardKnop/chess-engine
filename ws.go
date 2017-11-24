@@ -4,13 +4,13 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/RichardKnop/chess/engine"
+	"github.com/RichardKnop/chess-game/engine"
 	"github.com/gorilla/websocket"
 )
 
 var (
-	theEngine *engine.Engine
-	err       error
+	eng *engine.Engine
+	err error
 )
 
 var upgrader = websocket.Upgrader{
@@ -19,14 +19,19 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	theEngine, err = engine.New()
+	eng, err = engine.New()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Web sockets handler
 	http.HandleFunc("/ws", wsHandler)
+
+	// Serving static files from public directory
 	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./public"))))
+
 	log.Print("Websocket running at :8080/ws")
+
 	panic(http.ListenAndServe(":8080", nil))
 }
 
@@ -34,7 +39,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// Open a websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("FAFASF", err)
 		return
 	}
 	if err != nil {
@@ -43,7 +48,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Start the engine
-	if err := theEngine.ReadFromWebsocket(conn); err != nil {
+	if err := eng.ReadFromWebsocket(conn); err != nil {
 		log.Fatal(err)
 	}
 }

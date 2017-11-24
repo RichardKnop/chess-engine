@@ -7,7 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/RichardKnop/chess/engine/message"
 	"github.com/gorilla/websocket"
 )
 
@@ -45,71 +44,71 @@ func (e *Engine) ReadFromWebsocket(conn *websocket.Conn) error {
 			}
 		}
 
-		data = bytes.TrimSpace(bytes.Replace(data, newline, space, -1))
-
-		// Log the received message
-		log.Printf("Received message: %s", data)
-
-		response, err := e.handleMessage(data)
+		msg, err := e.handleMessage(data)
 		if err != nil {
 			log.Print(err)
 		}
 
-		log.Printf("Sending message: %v", response)
+		// debug, err := json.Marshal(response)
+		// if err == nil {
+		// 	log.Printf("Replied with: %s", debug)
+		// }
 
-		// Write response message to socket
-		conn.WriteJSON(response)
+		if msg != nil {
+			// Write response message to socket
+			conn.WriteJSON(msg.Data)
+		}
 	}
 }
 
-func (e *Engine) handleMessage(data []byte) (interface{}, error) {
+func (e *Engine) handleMessage(data []byte) (*Message, error) {
+	data = bytes.TrimSpace(bytes.Replace(data, newline, space, -1))
+
 	// Unmarshal the message
-	msg := new(message.Message)
+	msg := new(Message)
 	if err := json.Unmarshal(data, msg); err != nil {
-		return nil, fmt.Errorf("Invalid message: %v", err)
+		return nil, nil
 	}
+
+	// Log the received message
+	log.Printf("Received message: %s", data)
 
 	// Handle message based on its type
 	switch msg.Type {
-	case message.NewGame:
-		orient, _ := msg.Data["orientation"]
-		pos, _ := msg.Data["position"]
-		board, err := e.NewGame(orient, pos)
+	case NewGameMessage:
+		g, err := e.NewGame(msg.Data.GameID, msg.Data.Orientation, msg.Data.Position)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]interface{}{
-			"type": message.NewGame,
-			"data": board.ToMap(),
-		}, nil
-	case message.JoinGame:
-		boardID, _ := msg.Data["board_id"]
-		playerID, _ := msg.Data["player_id"]
-		board, err := e.GetBoard(boardID)
+
+		msg.Data.GameID = g.ID
+		msg.Data.Orientation = g.Orientation
+		msg.Data.Position = g.Position
+		return msg, nil
+	case JoinGameMessage:
+		g, err := e.GetGame(msg.Data.GameID)
 		if err != nil {
 			return nil, err
 		}
-		board.Join <- &Player{ID: playerID}
-		return map[string]interface{}{
-			"type": message.JoinGame,
-			"data": board.ToMap(),
-		}, nil
-	case message.MakeMove:
-		boardID, _ := msg.Data["board_id"]
-		source, _ := msg.Data["source"]
-		target, _ := msg.Data["target"]
-		piece, _ := msg.Data["piece"]
-		board, err := e.GetBoard(boardID)
+		g.Join <- &Player{ID: msg.Data.PlayerID}
+
+		msg.Data.GameID = g.ID
+		msg.Data.Orientation = g.Orientation
+		msg.Data.Position = g.Position
+		return msg, nil
+	case MakeMoveMessage:
+		g, err := e.GetGame(msg.Data.GameID)
 		if err != nil {
 			return nil, err
 		}
-		if err := board.MakeMove(source, target, piece); err != nil {
+		if err := g.MakeMove(msg.Data.Source, msg.Data.Target, msg.Data.Piece); err != nil {
 			return nil, err
 		}
-		return map[string]interface{}{
-			"type": message.MakeMove,
-			"data": board.ToMap(),
-		}, nil
+
+		msg.Data.GameID = g.ID
+		msg.Data.Orientation = g.Orientation
+		msg.Data.Position = g.Position
+		return msg, nil
 	}
 
 	return nil, fmt.Errorf("Unknown message type: %s", msg.Type)
