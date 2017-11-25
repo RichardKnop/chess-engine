@@ -8,10 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var (
-	eng *engine.Engine
-	err error
-)
+var chessEngine *engine.Engine
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -19,10 +16,10 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	eng, err = engine.New()
-	if err != nil {
-		log.Fatal(err)
-	}
+	chessEngine = engine.New()
+
+	// Start the engine
+	go chessEngine.Run()
 
 	// Web sockets handler
 	http.HandleFunc("/ws", wsHandler)
@@ -39,16 +36,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// Open a websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal("FAFASF", err)
 		return
 	}
-	if err != nil {
-		http.Error(w, "Could not open websocket connection", http.StatusBadRequest)
-	}
-	defer conn.Close()
 
-	// Start the engine
-	if err := eng.ReadFromWebsocket(conn); err != nil {
-		log.Fatal(err)
-	}
+	// Register the client connection with the engine
+	client := chessEngine.NewClient(conn)
+
+	go client.ReadPump()
+	go client.WritePump()
 }

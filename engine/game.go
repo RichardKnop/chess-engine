@@ -1,114 +1,173 @@
 package engine
 
 import (
-	"errors"
+	"encoding/json"
 	"log"
 )
 
+// Player represents an active player
+type Player struct {
+	ID          string
+	Orientation string
+
+	client *Client
+}
+
 // NewPlayer creates a new player object
-func NewPlayer(playerID string) (*Player, error) {
+func NewPlayer(client *Client, playerID, orientation string) (*Player, error) {
 	return &Player{
-		ID:    playerID,
-		Moves: make(chan *Move),
+		ID:          playerID,
+		Orientation: orientation,
+		client:      client,
 	}, nil
 }
 
-// NewGame creates a new game of chess
-func NewGame(gameID, orientation, position string) (*Game, error) {
-	if orientation != Black && orientation != White {
-		return nil, errors.New("Orientation can only be either black or white")
+// Notify sends a message to player
+func (p *Player) Notify(msg *Message) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Error marshaling message: %v", err)
 	}
+	p.client.send <- data
+}
+
+// Move represents a single move
+type Move struct {
+	PlayerID string
+	Source   string
+	Target   string
+	Piece    string
+}
+
+// Game represents a game of chess
+type Game struct {
+	ID string
+	// FEM position string
+	Position string
+	// Sequence of all the moves played
+	Moves []*Move
+	// Player with white pieces
+	White *Player
+	// Player with black pieces
+	Black *Player
+}
+
+// NewGame creates a new game of chess
+func NewGame(gameID, position string) (*Game, error) {
+	// Default to initial position if not specified
 	if position == "" {
 		position = InitialPosition
 	}
 
-	b := &Game{
-		ID:          gameID,
-		Broadcast:   make(chan *Move),
-		Join:        make(chan *Player),
-		Leave:       make(chan *Player),
-		Orientation: orientation,
-		Position:    position,
-		Moves:       make([]*Move, 0),
+	g := &Game{
+		ID:       gameID,
+		Position: position,
+		Moves:    make([]*Move, 0),
 	}
 
-	log.Printf("New game created: %s", gameID)
+	log.Printf("New game created: %s", g.ID)
 
-	return b, nil
+	return g, nil
+}
+
+// NotifyPlayers sends a message to all players
+func (g *Game) NotifyPlayers(msg *Message) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Error marshaling message: %v", err)
+	}
+
+	if g.White != nil {
+		g.White.client.send <- data
+	}
+	if g.Black != nil {
+		g.Black.client.send <- data
+	}
+}
+
+// Join is called when a player joins the game
+func (g *Game) Join(p *Player) error {
+	switch p.Orientation {
+	case OrientationWhite:
+		g.White = p
+	case OrientationBlack:
+		g.Black = p
+	}
+
+	log.Printf("Player %s joined game %s playing with %s pieces", p.ID, g.ID, p.Orientation)
+
+	if g.Black != nil && g.White != nil {
+		g.NotifyPlayers(&Message{
+			Type: "game_started",
+			Data: &MessageData{
+				GameID:   g.ID,
+				Position: g.Position,
+				PlayerID: p.ID,
+			},
+		})
+	}
+
+	return nil
+}
+
+// Leave is called when a player leaves the game
+func (g *Game) Leave(p *Player) error {
+	if g.White != nil && p.ID == g.White.ID {
+		g.White = nil
+	}
+	if g.Black != nil && p.ID == g.Black.ID {
+		g.Black = nil
+	}
+
+	log.Printf("Player %s left game %s", p.ID, g.ID)
+
+	if opponent := g.findOpponent(p.ID); opponent != nil {
+		opponent.Notify(&Message{
+			Type: "player_left",
+			Data: &MessageData{
+				GameID:   g.ID,
+				Position: g.Position,
+				PlayerID: p.ID,
+			},
+		})
+	}
+
+	return nil
 }
 
 // MakeMove moves a piece
-func (g *Game) MakeMove(source, target, piece string) error {
+func (g *Game) MakeMove(playerID, source, target, piece string) error {
 	m := &Move{
-		Target: target,
-		Source: source,
-		Piece:  piece,
+		PlayerID: playerID,
+		Target:   target,
+		Source:   source,
+		Piece:    piece,
 	}
 	g.Moves = append(g.Moves, m)
 
 	// TODO - update position
 
-	// Notify players of the move
-	g.White.Moves <- m
-	g.Black.Moves <- m
+	if opponent := g.findOpponent(playerID); opponent != nil {
+		opponent.Notify(&Message{
+			Type: "move_made",
+			Data: &MessageData{
+				GameID:   g.ID,
+				Position: g.Position,
+				PlayerID: playerID,
+			},
+		})
+	}
 
 	return nil
 }
 
-// ToMap returns a map representation of the game
-func (g *Game) ToMap() map[string]string {
-	return map[string]string{
-		"id":          g.ID,
-		"orientation": g.Orientation,
-		"position":    g.Position,
+func (g *Game) findOpponent(playerID string) *Player {
+	if g.White != nil && playerID == g.White.ID {
+		return g.Black
 	}
-}
-
-// Run starts the game to players can join
-func (g *Game) Run() error {
-	for {
-		select {
-		case player := <-g.Join:
-			// Game already has both players
-			if g.White != nil && g.Black != nil {
-				continue
-			}
-
-			log.Printf("Player %s joined game %s", player.ID, g.ID)
-
-			switch g.Orientation {
-			case White:
-				if g.White == nil {
-					g.White = player
-				} else {
-					g.Black = player
-				}
-			case Black:
-				if g.Black == nil {
-					g.Black = player
-				} else {
-					g.White = player
-				}
-			default:
-				break
-			}
-		case player := <-g.Leave:
-			log.Printf("Player %s left game %s", player.ID, g.ID)
-
-			if player.ID == g.White.ID {
-				g.White = nil
-			}
-			if player.ID == g.Black.ID {
-				g.Black = nil
-			}
-			close(player.Moves)
-		case move := <-g.Broadcast:
-			if g.White != nil {
-				g.White.Moves <- move
-			}
-			if g.Black != nil {
-				g.Black.Moves <- move
-			}
-		}
+	if g.Black != nil && playerID == g.Black.ID {
+		return g.White
 	}
+
+	return nil
 }

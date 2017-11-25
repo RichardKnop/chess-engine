@@ -1,11 +1,9 @@
-var conn,
-    chessBoard,
-    gameID, playerID,
+var conn, chessBoard, gameID, playerID,
+    newGameBtn = document.getElementById("new-game-btn"),
     log = document.getElementById("console"),
     cfg = {
         draggable: true,
         position: "start",
-        orientation: "white",
         onDrop: function(source, target, piece, newPos, oldPos, orientation) {
             // console.log("Source: " + source);
             // console.log("Target: " + target);
@@ -16,9 +14,10 @@ var conn,
             // console.log("--------------------");
 
             conn.send(JSON.stringify({
-                "type": "make_move",
-                "data": {
+                type: "make_move",
+                data: {
                     "game_id": gameID,
+                    "player_id": playerID,
                     "source": source,
                     "target": target,
                     "piece": piece,
@@ -33,19 +32,6 @@ function initWebsocket() {
 
     socket.onopen = function() {
         appendLog("Socket is open");
-
-        playerID = generateUUID();
-        gameID = generateUUID();
-
-        conn.send(JSON.stringify({
-            "type": "new_game",
-            "data": {
-                "game_id": gameID,
-                "orientation": cfg["orientation"],
-                "position": "",
-            },
-        }));
-
     };
     socket.onmessage = function(evt) {
         var messages = evt.data.split("\n");
@@ -62,34 +48,69 @@ function initWebsocket() {
                 return;
             }
 
-            appendLog(msg);
+            console.log(msg);
 
-            switch (msg["type"]) {
-                case "new_game":
-                    board = msg["data"];
-                    conn.send(JSON.stringify({
-                        "type": "join_game",
-                        "data": {
-                            "game_id": gameID,
-                            "player_id": playerID,
-                        },
-                    }));
+            gameID = msg.data["game_id"];
+
+
+            switch (msg.type) {
+                case "game_started":
+                    console.log("Game has started");
                     break;
-
-                case "join_game":
+                case "player_left":
+                    console.log("Opponent left");
                     break;
-
-                case "make_move":
+                case "move_made":
                     break;
             }
         }
     }
     socket.onclose = function() {
+        conn.send(JSON.stringify({
+            type: "leave_game",
+            data: {
+                "player_id": playerID,
+                "game_id": gameID,
+            },
+        }));
+
         appendLog("Socket closed\n");
     }
 
     return socket;
 }
+
+newGameBtn.addEventListener("click", function(evt) {
+    var radios = document.getElementsByName('orientation'),
+        orientation;
+    for (var i = 0, length = radios.length; i < length; i++) {
+        if (radios[i].checked) {
+            orientation = radios[i].value;
+            break;
+        }
+    }
+
+    // Choose orientation randomly if not specified by user
+    if (orientation === undefined) {
+        if (Math.floor(Math.random() * 2) > 0) {
+            orientation = "black";
+        } else {
+            orientation = "white";
+        }
+    }
+    cfg["orientation"] = orientation;
+    chessBoard = ChessBoard('board', cfg);
+
+    conn.send(JSON.stringify({
+        type: "find_game",
+        data: {
+            "orientation": cfg["orientation"],
+            "player_id": playerID,
+        },
+    }));
+
+    return false;
+});
 
 function generateUUID() { // Public Domain/MIT
     var d = new Date().getTime();
@@ -112,8 +133,8 @@ window.onload = function() {
     if (window.WebSocket === undefined) {
         appendLog("Your browser does not support WebSockets.");
         return;
-    } else {
-        conn = initWebsocket();
-        chessBoard = ChessBoard('board', cfg);
     }
+
+    playerID = generateUUID();
+    conn = initWebsocket();
 };

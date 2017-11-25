@@ -1,7 +1,13 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
+)
+
+var (
+	// ErrInvalidOrientation ...
+	ErrInvalidOrientation = errors.New("Orientation can only be either black or white")
 )
 
 // GameNotFoundError represents a custom error
@@ -32,4 +38,19 @@ func (e GameAlreadyExistsError) Error() string {
 // NewGameAlreadyExistsError creates a new instance of GameAlreadyExistsError
 func NewGameAlreadyExistsError(gameID string) *GameAlreadyExistsError {
 	return &GameAlreadyExistsError{gameID: gameID}
+}
+
+// UnknownMessageType represents a custom error
+type UnknownMessageType struct {
+	msgType string
+}
+
+// Error implements the error interface
+func (e UnknownMessageType) Error() string {
+	return fmt.Sprintf("Unknown message type: %s", e.msgType)
+}
+
+// NewUnknownMessageType creates a new instance of UnknownMessageType
+func NewUnknownMessageType(msgType string) *UnknownMessageType {
+	return &UnknownMessageType{msgType: msgType}
 }
