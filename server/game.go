@@ -1,4 +1,4 @@
-package engine
+package server
 
 import (
 	"encoding/json"
@@ -136,13 +136,14 @@ func (g *Game) Leave(p *Player) error {
 }
 
 // MakeMove moves a piece
-func (g *Game) MakeMove(playerID, source, target, piece string) error {
+func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPosition string) error {
 	m := &Move{
 		PlayerID: playerID,
 		Target:   target,
 		Source:   source,
 		Piece:    piece,
 	}
+	g.Position = newPosition
 	g.Moves = append(g.Moves, m)
 
 	// TODO - update position
@@ -154,6 +155,9 @@ func (g *Game) MakeMove(playerID, source, target, piece string) error {
 				GameID:   g.ID,
 				Position: g.Position,
 				PlayerID: playerID,
+				Target:   target,
+				Source:   source,
+				Piece:    piece,
 			},
 		})
 	}

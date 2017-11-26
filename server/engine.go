@@ -1,4 +1,4 @@
-package engine
+package server
 
 import (
 	"log"
@@ -15,8 +15,8 @@ type Engine struct {
 	games map[string]*Game
 }
 
-// New creates a new instance of Engine
-func New() *Engine {
+// NewEngine creates a new instance of Engine
+func NewEngine() *Engine {
 	return &Engine{
 		hub:   NewHub(),
 		games: make(map[string]*Game, 0),

@@ -1,4 +1,4 @@
-package engine
+package server
 
 import (
 	"bytes"
@@ -165,9 +165,12 @@ func (c *Client) makeMove(msg *Message) error {
 	if err != nil {
 		return err
 	}
-	if err := g.MakeMove(msg.Data.PlayerID, msg.Data.Source, msg.Data.Target, msg.Data.Piece); err != nil {
-		return err
-	}
-
-	return nil
+	return g.MakeMove(
+		msg.Data.PlayerID,
+		msg.Data.Source,
+		msg.Data.Target,
+		msg.Data.Piece,
+		msg.Data.OldPosition,
+		msg.Data.NewPosition,
+	)
 }

@@ -1,4 +1,4 @@
-package engine
+package server
 
 const (
 	// OrientationBlack means black is on the play facing white
@@ -26,4 +26,6 @@ type MessageData struct {
 	Source      string `json:"source,omitempty"`
 	Target      string `json:"target,omitempty"`
 	Piece       string `json:"piece,omitempty"`
+	OldPosition string `json:"old_position,omitempty"`
+	NewPosition string `json:"new_position,omitempty"`
 }

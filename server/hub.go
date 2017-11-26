@@ -1,4 +1,4 @@
-package engine
+package server
 
 // Hub maintains the set of active clients
 type Hub struct {

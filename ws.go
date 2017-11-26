@@ -4,11 +4,11 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/RichardKnop/chess-game/engine"
+	"github.com/RichardKnop/chess-engine/server"
 	"github.com/gorilla/websocket"
 )
 
-var chessEngine *engine.Engine
+var engine *server.Engine
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -16,16 +16,16 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	chessEngine = engine.New()
+	engine = server.NewEngine()
 
 	// Start the engine
-	go chessEngine.Run()
+	go engine.Run()
 
 	// Web sockets handler
 	http.HandleFunc("/ws", wsHandler)
 
 	// Serving static files from public directory
-	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./public"))))
+	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./client"))))
 
 	log.Print("Websocket running at :8080/ws")
 
@@ -40,7 +40,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register the client connection with the engine
-	client := chessEngine.NewClient(conn)
+	client := engine.NewClient(conn)
 
 	go client.ReadPump()
 	go client.WritePump()
