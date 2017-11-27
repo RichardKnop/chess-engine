@@ -57,23 +57,38 @@ function initWebsocket() {
 
             console.log(msg);
 
-            game.ID = msg.data['game_id'];
-
             switch (msg.type) {
                 case 'game_started':
-                    appendLog('Game started.')
-                    board.position('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq');
+                    // Store game ID
+                    game.ID = msg.data['game_id'];
+
+                    // Set starting board position
+                    board.position('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR');
+
+                    // Set game.started flag to true, also set game.myTurn to true 
+                    // if playing with white pieces 
                     game.started = true;
                     if (cfg.orientation === 'white') {
                         game.myTurn = true;
                     }
+
+                    // Append game ID to URL
+                    if ('URLSearchParams' in window) {
+                        var searchParams = new URLSearchParams(window.location.search);
+                        searchParams.set('game_id', game.ID);
+                    }
+
+                    appendLog('Game started.');
+
                     break;
                 case 'player_left':
                     appendLog('Opponent left');
                     break;
                 case 'move_made':
-                    board.position(msg.data['position']);
-                    game.myTurn = !game.myTurn;
+                    if (board.fen() !== msg.data['position']) {
+                        board.position(msg.data['position']);
+                        game.myTurn = !game.myTurn;
+                    }
                     break;
             }
         }

@@ -71,10 +71,10 @@ func NewGame(gameID, position string) (*Game, error) {
 }
 
 // NotifyPlayers sends a message to all players
-func (g *Game) NotifyPlayers(msg *Message) {
+func (g *Game) NotifyPlayers(msg *Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("Error marshaling message: %v", err)
+		return err
 	}
 
 	if g.White != nil {
@@ -83,6 +83,8 @@ func (g *Game) NotifyPlayers(msg *Message) {
 	if g.Black != nil {
 		g.Black.client.send <- data
 	}
+
+	return nil
 }
 
 // Join is called when a player joins the game
@@ -137,6 +139,8 @@ func (g *Game) Leave(p *Player) error {
 
 // MakeMove moves a piece
 func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPosition string) error {
+	// Validate move
+
 	m := &Move{
 		PlayerID: playerID,
 		Target:   target,
@@ -146,21 +150,17 @@ func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPositio
 	g.Position = newPosition
 	g.Moves = append(g.Moves, m)
 
-	// TODO - update position
-
-	if opponent := g.findOpponent(playerID); opponent != nil {
-		opponent.Notify(&Message{
-			Type: "move_made",
-			Data: &MessageData{
-				GameID:   g.ID,
-				Position: g.Position,
-				PlayerID: playerID,
-				Target:   target,
-				Source:   source,
-				Piece:    piece,
-			},
-		})
-	}
+	g.NotifyPlayers(&Message{
+		Type: "move_made",
+		Data: &MessageData{
+			GameID:   g.ID,
+			Position: g.Position,
+			PlayerID: playerID,
+			Target:   target,
+			Source:   source,
+			Piece:    piece,
+		},
+	})
 
 	return nil
 }
