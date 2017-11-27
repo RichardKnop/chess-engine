@@ -29,7 +29,7 @@ func main() {
 
 	log.Print("Websocket running at :8080/ws")
 
-	panic(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +42,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// Register the client connection with the engine
 	client := engine.NewClient(conn)
 
-	go client.ReadPump()
-	go client.WritePump()
+	go func() {
+		if err := client.ReadPump(); err != nil {
+			log.Print("Read pump error: ", err)
+		}
+	}()
+
+	go func() {
+		if err := client.WritePump(); err != nil {
+			log.Print("Write pump error: ", err)
+		}
+	}()
 }

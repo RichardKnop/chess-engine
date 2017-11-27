@@ -62,7 +62,7 @@ function initWebsocket() {
             switch (msg.type) {
                 case 'game_started':
                     appendLog('Game started.')
-                    board.position('start');
+                    board.position('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq');
                     game.started = true;
                     if (cfg.orientation === 'white') {
                         game.myTurn = true;

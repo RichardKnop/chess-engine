@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -45,14 +46,30 @@ type Client struct {
 // The application runs readPump in a per-connection goroutine. The application
 // ensures that there is at most one reader on a connection by executing all
 // reads from this goroutine.
-func (c *Client) ReadPump() error {
+func (c *Client) ReadPump() (err error) {
+	defer func() {
+		// Intercept panic from failed websocket connection such as
+		// https://github.com/gorilla/websocket/blob/master/conn.go#L959
+		// and deregister client
+		if e := recover(); e != nil {
+			switch e := e.(type) {
+			case error:
+				err = e
+			case string:
+				err = errors.New(e)
+			}
+
+			c.engine.hub.unregister <- c
+		}
+	}()
+
 	for {
 		// Read the message from the websocket
-		_, data, err := c.conn.ReadMessage()
-		if err != nil {
-			log.Printf("Debug websocket error: %v", err)
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				return fmt.Errorf("Unexpected close error: %v", err)
+		_, data, e := c.conn.ReadMessage()
+		if e != nil {
+			if websocket.IsUnexpectedCloseError(e, websocket.CloseGoingAway) {
+				err = fmt.Errorf("Unexpected close error: %v", e)
+				return
 			}
 		}
 
@@ -60,15 +77,15 @@ func (c *Client) ReadPump() error {
 
 		// Unmarshal the message
 		msg := new(Message)
-		if err := json.Unmarshal(data, msg); err != nil {
+		if json.Unmarshal(data, msg) != nil {
 			continue
 		}
 
 		// Log the received message
 		log.Printf("Received message: %s", data)
 
-		if err := c.handleMessage(msg); err != nil {
-			log.Printf("Error handling message: %v", err)
+		if e := c.handleMessage(msg); e != nil {
+			log.Printf("Error handling message: %v", e)
 		}
 	}
 }
@@ -78,7 +95,7 @@ func (c *Client) ReadPump() error {
 // A goroutine running writePump is started for each connection. The
 // application ensures that there is at most one writer to a connection by
 // executing all writes from this goroutine.
-func (c *Client) WritePump() {
+func (c *Client) WritePump() error {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -91,13 +108,12 @@ func (c *Client) WritePump() {
 			if !ok {
 				// The hub closed the channel.
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
+				return nil
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				log.Print(err)
-				return
+			w, e := c.conn.NextWriter(websocket.TextMessage)
+			if e != nil {
+				return e
 			}
 			w.Write(message)
 
@@ -108,13 +124,13 @@ func (c *Client) WritePump() {
 				w.Write(<-c.send)
 			}
 
-			if err := w.Close(); err != nil {
-				return
+			if e := w.Close(); e != nil {
+				return e
 			}
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				return
+			if e := c.conn.WriteMessage(websocket.PingMessage, []byte{}); e != nil {
+				return e
 			}
 		}
 	}
