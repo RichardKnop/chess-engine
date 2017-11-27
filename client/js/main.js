@@ -6,7 +6,7 @@ var conn,
         ID: generateUUID(),
     },
     game = {
-        ID: '', // will be populated later
+        ID: null,
         started: false,
         myTurn: false,
     },
@@ -35,7 +35,7 @@ var conn,
 
 function initWebsocket() {
     var wsHost = 'localhost:8080',
-        socket = new WebSocket('ws://' + wsHost + '/ws');
+        socket = new ReconnectingWebSocket('ws://' + wsHost + '/ws');
 
     socket.onopen = function() {
         appendLog('Socket is open');
@@ -78,16 +78,25 @@ function initWebsocket() {
             }
         }
     }
-    socket.onclose = function() {
-        conn.send(JSON.stringify({
-            type: 'leave_game',
-            data: {
-                'player_id': player['ID'],
-                'game_id': gameID,
-            },
-        }));
+    socket.onclose = function(e) {
+        switch (e) {
+            case 1000: // CLOSE_NORMAL
+                appendLog('Socket closed');
+                break;
+            default: // Abnormal closure
+                console.log(e);
+                break;
+        }
 
-        appendLog('Socket closed\n');
+        if (game.ID !== null) {
+            conn.send(JSON.stringify({
+                type: 'leave_game',
+                data: {
+                    'player_id': player['ID'],
+                    'game_id': game['ID'],
+                },
+            }));
+        }
     }
 
     return socket;
