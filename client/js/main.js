@@ -63,7 +63,7 @@ function initWebsocket() {
                     game.ID = msg.data['game_id'];
 
                     // Set starting board position
-                    board.position('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR');
+                    board.position(msg.data['position']);
 
                     // Set game.started flag to true, also set game.myTurn to true 
                     // if playing with white pieces 
@@ -73,9 +73,11 @@ function initWebsocket() {
                     }
 
                     // Append game ID to URL
-                    if ('URLSearchParams' in window) {
-                        var searchParams = new URLSearchParams(window.location.search);
-                        searchParams.set('game_id', game.ID);
+                    if (history.pushState && 'URLSearchParams' in window) {
+                        var params = new URLSearchParams();
+                        params.set('game_id', game.ID);
+                        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + params.toString();
+                        window.history.pushState({ path: newurl }, '', newurl);
                     }
 
                     appendLog('Game started.');
@@ -118,6 +120,12 @@ function initWebsocket() {
 }
 
 newGameBtn.addEventListener('click', function(evt) {
+    if (history.pushState && 'URLSearchParams' in window) {
+        var params = new URLSearchParams();
+        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + params.toString();
+        window.history.pushState({ path: newurl }, '', newurl);
+    }
+
     var orientation = getOrientation();
 
     // Choose orientation randomly if not specified by user
@@ -136,8 +144,8 @@ newGameBtn.addEventListener('click', function(evt) {
     conn.send(JSON.stringify({
         type: 'find_game',
         data: {
-            'orientation': cfg.orientation,
             'player_id': player.ID,
+            'orientation': cfg.orientation,
         },
     }));
 

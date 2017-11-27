@@ -31,6 +31,7 @@ func (h *Hub) Run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
+				client = nil
 			}
 		}
 	}

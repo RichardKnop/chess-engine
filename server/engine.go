@@ -78,15 +78,6 @@ func (e *Engine) GetGame(gameID string) (*Game, error) {
 	return g, nil
 }
 
-// NewPlayer creates a new player object
-func (e *Engine) NewPlayer(client *Client, playerID, orientation string) (*Player, error) {
-	return &Player{
-		ID:          playerID,
-		Orientation: orientation,
-		client:      client,
-	}, nil
-}
-
 // newGame creates a new game with blank state
 func (e *Engine) newGame(position string) (*Game, error) {
 	gameID := uuid.NewV4().String()

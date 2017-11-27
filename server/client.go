@@ -32,6 +32,8 @@ var (
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
+	PlayerID string
+
 	// The websocket connection.
 	conn *websocket.Conn
 
@@ -39,6 +41,16 @@ type Client struct {
 	send chan []byte
 
 	engine *Engine
+}
+
+// Notify sends a message to client
+func (c *Client) Notify(msg *Message) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	c.send <- data
+	return nil
 }
 
 // ReadPump pumps messages from the websocket connection to the engine/hub.
@@ -157,11 +169,7 @@ func (c *Client) findGame(msg *Message) error {
 	if err != nil {
 		return err
 	}
-	p, err := c.engine.NewPlayer(c, msg.Data.PlayerID, msg.Data.Orientation)
-	if err != nil {
-		return err
-	}
-	return g.Join(p)
+	return g.Join(c, msg.Data.PlayerID, msg.Data.Orientation)
 }
 
 func (c *Client) leaveGame(msg *Message) error {
@@ -169,11 +177,7 @@ func (c *Client) leaveGame(msg *Message) error {
 	if err != nil {
 		return err
 	}
-	p, err := c.engine.NewPlayer(c, msg.Data.PlayerID, msg.Data.Orientation)
-	if err != nil {
-		return err
-	}
-	return g.Leave(p)
+	return g.Leave(c)
 }
 
 func (c *Client) makeMove(msg *Message) error {

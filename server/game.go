@@ -5,32 +5,6 @@ import (
 	"log"
 )
 
-// Player represents an active player
-type Player struct {
-	ID          string
-	Orientation string
-
-	client *Client
-}
-
-// NewPlayer creates a new player object
-func NewPlayer(client *Client, playerID, orientation string) (*Player, error) {
-	return &Player{
-		ID:          playerID,
-		Orientation: orientation,
-		client:      client,
-	}, nil
-}
-
-// Notify sends a message to player
-func (p *Player) Notify(msg *Message) {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("Error marshaling message: %v", err)
-	}
-	p.client.send <- data
-}
-
 // Move represents a single move
 type Move struct {
 	PlayerID string
@@ -47,9 +21,9 @@ type Game struct {
 	// Sequence of all the moves played
 	Moves []*Move
 	// Player with white pieces
-	White *Player
+	White *Client
 	// Player with black pieces
-	Black *Player
+	Black *Client
 }
 
 // NewGame creates a new game of chess
@@ -78,25 +52,27 @@ func (g *Game) NotifyPlayers(msg *Message) error {
 	}
 
 	if g.White != nil {
-		g.White.client.send <- data
+		g.White.send <- data
 	}
 	if g.Black != nil {
-		g.Black.client.send <- data
+		g.Black.send <- data
 	}
 
 	return nil
 }
 
 // Join is called when a player joins the game
-func (g *Game) Join(p *Player) error {
-	switch p.Orientation {
+func (g *Game) Join(c *Client, playerID, orientation string) error {
+	c.PlayerID = playerID
+
+	switch orientation {
 	case OrientationWhite:
-		g.White = p
+		g.White = c
 	case OrientationBlack:
-		g.Black = p
+		g.Black = c
 	}
 
-	log.Printf("Player %s joined game %s playing with %s pieces", p.ID, g.ID, p.Orientation)
+	log.Printf("Player %s joined game %s playing with %s pieces", c.PlayerID, g.ID, orientation)
 
 	if g.Black != nil && g.White != nil {
 		g.NotifyPlayers(&Message{
@@ -104,7 +80,7 @@ func (g *Game) Join(p *Player) error {
 			Data: &MessageData{
 				GameID:   g.ID,
 				Position: g.Position,
-				PlayerID: p.ID,
+				PlayerID: c.PlayerID,
 			},
 		})
 	}
@@ -113,23 +89,23 @@ func (g *Game) Join(p *Player) error {
 }
 
 // Leave is called when a player leaves the game
-func (g *Game) Leave(p *Player) error {
-	if g.White != nil && p.ID == g.White.ID {
+func (g *Game) Leave(c *Client) error {
+	if g.White == c {
 		g.White = nil
 	}
-	if g.Black != nil && p.ID == g.Black.ID {
+	if g.Black == c {
 		g.Black = nil
 	}
 
-	log.Printf("Player %s left game %s", p.ID, g.ID)
+	log.Printf("Player %s left game %s", c.PlayerID, g.ID)
 
-	if opponent := g.findOpponent(p.ID); opponent != nil {
+	if opponent := g.findOpponent(c); opponent != nil {
 		opponent.Notify(&Message{
 			Type: "player_left",
 			Data: &MessageData{
 				GameID:   g.ID,
 				Position: g.Position,
-				PlayerID: p.ID,
+				PlayerID: c.PlayerID,
 			},
 		})
 	}
@@ -165,11 +141,11 @@ func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPositio
 	return nil
 }
 
-func (g *Game) findOpponent(playerID string) *Player {
-	if g.White != nil && playerID == g.White.ID {
+func (g *Game) findOpponent(c *Client) *Client {
+	if g.White == c {
 		return g.Black
 	}
-	if g.Black != nil && playerID == g.Black.ID {
+	if g.Black == c {
 		return g.White
 	}
 
