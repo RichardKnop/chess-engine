@@ -6,7 +6,7 @@ var conn,
         ID: generateUUID(),
     },
     game = {
-        ID: null,
+        ID: getQueryStringParam('game_id'),
         started: false,
         myTurn: false,
     },
@@ -38,7 +38,18 @@ function initWebsocket() {
         socket = new ReconnectingWebSocket('ws://' + wsHost + '/ws');
 
     socket.onopen = function() {
-        appendLog('Connection established');
+        console.log('Connection established');
+
+        if (game.ID) {
+            conn.send(JSON.stringify({
+                type: 'get_game',
+                data: {
+                    'game_id': game.ID,
+                    'player_id': player.ID,
+                    'orientation': cfg.orientation,
+                },
+            }));
+        }
     };
     socket.onmessage = function(evt) {
         var messages = evt.data.split('\n');
@@ -95,18 +106,7 @@ function initWebsocket() {
     socket.onclose = function(e) {
         switch (e) {
             case 1000: // CLOSE_NORMAL
-                appendLog('Connection closed');
-
-                if (game.ID !== null) {
-                    conn.send(JSON.stringify({
-                        type: 'leave_game',
-                        data: {
-                            'player_id': player['ID'],
-                            'game_id': game['ID'],
-                        },
-                    }));
-                }
-
+                console.log('Connection closed');
                 break;
             default: // Abnormal closure
                 console.log(e);
@@ -191,13 +191,21 @@ function setOrientation(orientation) {
     }
 }
 
-function setQueryStringParams(args) {
+function getQueryStringParam(key) {
+    if ('URLSearchParams' in window) {
+        var searchParams = new URLSearchParams((new URL(window.location.href)).search);
+        return searchParams.get(key);
+    }
+    return null;
+}
+
+function setQueryStringParams(params) {
     if (history.pushState && 'URLSearchParams' in window) {
-        var params = new URLSearchParams();
-        for (var key in args) {
-            params.set(key, args[key]);
+        var searchParams = new URLSearchParams();
+        for (var key in params) {
+            searchParams.set(key, params[key]);
         }
-        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + params.toString();
+        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + searchParams.toString();
         window.history.pushState({ path: newurl }, '', newurl);
     }
 }

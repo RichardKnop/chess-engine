@@ -70,9 +70,10 @@ func (c *Client) ReadPump() (err error) {
 			case string:
 				err = errors.New(e)
 			}
-
-			c.engine.hub.unregister <- c
 		}
+
+		c.conn.Close()
+		c.engine.ClientDisconnected(c)
 	}()
 
 	for {
@@ -112,10 +113,17 @@ func (c *Client) WritePump() error {
 	defer func() {
 		ticker.Stop()
 		c.conn.Close()
+
+		c.engine.ClientDisconnected(c)
 	}()
 	for {
 		select {
 		case message, ok := <-c.send:
+			// Skip empty messages
+			if len(message) == 0 {
+				continue
+			}
+
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
@@ -169,7 +177,12 @@ func (c *Client) findGame(msg *Message) error {
 	if err != nil {
 		return err
 	}
-	return g.Join(c, msg.Data.PlayerID, msg.Data.Orientation)
+
+	if err := g.Join(c, msg.Data.PlayerID, msg.Data.Orientation); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *Client) getGame(msg *Message) error {
@@ -177,6 +190,11 @@ func (c *Client) getGame(msg *Message) error {
 	if err != nil {
 		return err
 	}
+
+	if err := g.Join(c, msg.Data.PlayerID, msg.Data.Orientation); err != nil {
+		return err
+	}
+
 	return g.NotifyAboutState()
 }
 

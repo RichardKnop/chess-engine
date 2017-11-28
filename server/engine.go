@@ -69,6 +69,23 @@ func (e *Engine) FindGame(orientation string) (*Game, error) {
 	return e.newGame(InitialPosition)
 }
 
+// ClientDisconnected is called when a client disconnects
+func (e *Engine) ClientDisconnected(c *Client) error {
+	// Remove the client from all game instances
+	for gameID, g := range e.games {
+		g.Leave(c)
+
+		if len(g.GetPlayers()) == 0 {
+			log.Printf("Deleting game %s", gameID)
+			delete(e.games, gameID)
+		}
+	}
+
+	c.engine.hub.unregister <- c
+
+	return nil
+}
+
 // GetGame returns in memory game state
 func (e *Engine) GetGame(gameID string) (*Game, error) {
 	g, ok := e.games[gameID]

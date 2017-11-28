@@ -44,31 +44,6 @@ func NewGame(gameID, position string) (*Game, error) {
 	return g, nil
 }
 
-// ActivePlayerID returns player ID of a player who is on the move currently
-func (g *Game) ActivePlayerID() string {
-	if len(g.Moves)/2 == 0 {
-		return g.White.PlayerID
-	}
-	return g.Black.PlayerID
-}
-
-// NotifyPlayers sends a message to all players
-func (g *Game) NotifyPlayers(msg *Message) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	if g.White != nil {
-		g.White.send <- data
-	}
-	if g.Black != nil {
-		g.Black.send <- data
-	}
-
-	return nil
-}
-
 // Join is called when a player joins the game
 func (g *Game) Join(c *Client, playerID, orientation string) error {
 	c.PlayerID = playerID
@@ -82,15 +57,30 @@ func (g *Game) Join(c *Client, playerID, orientation string) error {
 
 	log.Printf("Player %s joined game %s playing with %s pieces", c.PlayerID, g.ID, orientation)
 
-	if g.Black != nil && g.White != nil {
-		g.NotifyPlayers(&Message{
+	if len(g.GetPlayers()) == 2 {
+		msg := &Message{
 			Type: "game_started",
 			Data: &MessageData{
 				GameID:   g.ID,
 				Position: g.Position,
 				PlayerID: c.PlayerID,
 			},
-		})
+		}
+		g.notifyPlayers(msg)
+	}
+
+	return nil
+}
+
+// Leave is called when a player leaves the game
+func (g *Game) Leave(c *Client) error {
+	if g.White != nil && g.White.PlayerID == c.PlayerID {
+		g.White = nil
+		log.Printf("Player %s left game %s", c.PlayerID, g.ID)
+	}
+	if g.Black != nil && g.Black.PlayerID == c.PlayerID {
+		g.Black = nil
+		log.Printf("Player %s left game %s", c.PlayerID, g.ID)
 	}
 
 	return nil
@@ -110,7 +100,7 @@ func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPositio
 	g.Position = newPosition
 	g.Moves = append(g.Moves, m)
 
-	return g.NotifyPlayers(&Message{
+	msg := &Message{
 		Type: "move_made",
 		Data: &MessageData{
 			GameID:   g.ID,
@@ -120,21 +110,63 @@ func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPositio
 			Source:   source,
 			Piece:    piece,
 		},
-	})
+	}
+	return g.notifyPlayers(msg)
 }
 
 // NotifyAboutState notifies players about current game state
 func (g *Game) NotifyAboutState() error {
-	return g.NotifyPlayers(&Message{
+	msg := &Message{
 		Type: "state_update",
 		Data: &MessageData{
 			GameID:   g.ID,
 			Position: g.Position,
-			PlayerID: g.ActivePlayerID(),
 		},
-	})
+	}
+	if activePlayerID := g.getActivePlayerID(); activePlayerID != nil {
+		msg.Data.PlayerID = *activePlayerID
+	}
+	return g.notifyPlayers(msg)
 }
 
+// GetPlayers returns slice of players currently connected to the game
+func (g *Game) GetPlayers() []*Client {
+	var players []*Client
+	if g.White != nil {
+		players = append(players, g.White)
+	}
+	if g.Black != nil {
+		players = append(players, g.Black)
+	}
+	return players
+}
+
+// getActivePlayerID returns player ID of a player who is on the move currently
+func (g *Game) getActivePlayerID() *string {
+	if len(g.Moves)/2 == 0 && g.White != nil {
+		return &g.White.PlayerID
+	}
+	if len(g.Moves)/2 == 1 && g.Black != nil {
+		return &g.Black.PlayerID
+	}
+	return nil
+}
+
+// notifyPlayers sends a message to all players
+func (g *Game) notifyPlayers(msg *Message) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	for _, p := range g.GetPlayers() {
+		p.send <- data
+	}
+
+	return nil
+}
+
+// findOpponent returns opponent to player
 func (g *Game) findOpponent(c *Client) *Client {
 	if g.White == c {
 		return g.Black
