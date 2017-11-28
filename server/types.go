@@ -6,7 +6,7 @@ const (
 	// OrientationWhite means white is on the play facing black
 	OrientationWhite = "white"
 
-	// Initial is a FEM representation of initial board state
+	// InitialPosition is a FEM representation of initial board state
 	// See https://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwards_Notation
 	InitialPosition = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
 )
