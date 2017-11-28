@@ -38,7 +38,7 @@ function initWebsocket() {
         socket = new ReconnectingWebSocket('ws://' + wsHost + '/ws');
 
     socket.onopen = function() {
-        appendLog('Socket is open');
+        appendLog('Connection established');
     };
     socket.onmessage = function(evt) {
         var messages = evt.data.split('\n');
@@ -62,6 +62,9 @@ function initWebsocket() {
                     // Store game ID
                     game.ID = msg.data['game_id'];
 
+                    // Append game ID to URL
+                    setQueryStringParams({ 'game_id': game.ID });
+
                     // Set starting board position
                     board.position(msg.data['position']);
 
@@ -70,14 +73,6 @@ function initWebsocket() {
                     game.started = true;
                     if (cfg.orientation === 'white') {
                         game.myTurn = true;
-                    }
-
-                    // Append game ID to URL
-                    if (history.pushState && 'URLSearchParams' in window) {
-                        var params = new URLSearchParams();
-                        params.set('game_id', game.ID);
-                        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + params.toString();
-                        window.history.pushState({ path: newurl }, '', newurl);
                     }
 
                     appendLog('Game started.');
@@ -98,21 +93,22 @@ function initWebsocket() {
     socket.onclose = function(e) {
         switch (e) {
             case 1000: // CLOSE_NORMAL
-                appendLog('Socket closed');
+                appendLog('Connection closed');
+
+                if (game.ID !== null) {
+                    conn.send(JSON.stringify({
+                        type: 'leave_game',
+                        data: {
+                            'player_id': player['ID'],
+                            'game_id': game['ID'],
+                        },
+                    }));
+                }
+
                 break;
             default: // Abnormal closure
                 console.log(e);
                 break;
-        }
-
-        if (game.ID !== null) {
-            conn.send(JSON.stringify({
-                type: 'leave_game',
-                data: {
-                    'player_id': player['ID'],
-                    'game_id': game['ID'],
-                },
-            }));
         }
     }
 
@@ -120,11 +116,8 @@ function initWebsocket() {
 }
 
 newGameBtn.addEventListener('click', function(evt) {
-    if (history.pushState && 'URLSearchParams' in window) {
-        var params = new URLSearchParams();
-        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + params.toString();
-        window.history.pushState({ path: newurl }, '', newurl);
-    }
+    // Reset query string params
+    setQueryStringParams({});
 
     var orientation = getOrientation();
 
@@ -186,6 +179,17 @@ function setOrientation(orientation) {
             radios[i].checked = true;
             break;
         }
+    }
+}
+
+function setQueryStringParams(params) {
+    if (history.pushState && 'URLSearchParams' in window) {
+        var params = new URLSearchParams();
+        for (var key in params) {
+            params.set(key, params[key]);
+        }
+        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + params.toString();
+        window.history.pushState({ path: newurl }, '', newurl);
     }
 }
 
