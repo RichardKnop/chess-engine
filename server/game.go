@@ -44,6 +44,14 @@ func NewGame(gameID, position string) (*Game, error) {
 	return g, nil
 }
 
+// ActivePlayerID returns player ID of a player who is on the move currently
+func (g *Game) ActivePlayerID() string {
+	if len(g.Moves)/2 == 0 {
+		return g.White.PlayerID
+	}
+	return g.Black.PlayerID
+}
+
 // NotifyPlayers sends a message to all players
 func (g *Game) NotifyPlayers(msg *Message) error {
 	data, err := json.Marshal(msg)
@@ -88,45 +96,21 @@ func (g *Game) Join(c *Client, playerID, orientation string) error {
 	return nil
 }
 
-// Leave is called when a player leaves the game
-func (g *Game) Leave(c *Client) error {
-	if g.White == c {
-		g.White = nil
-	}
-	if g.Black == c {
-		g.Black = nil
-	}
-
-	log.Printf("Player %s left game %s", c.PlayerID, g.ID)
-
-	if opponent := g.findOpponent(c); opponent != nil {
-		opponent.Notify(&Message{
-			Type: "player_left",
-			Data: &MessageData{
-				GameID:   g.ID,
-				Position: g.Position,
-				PlayerID: c.PlayerID,
-			},
-		})
-	}
-
-	return nil
-}
-
 // MakeMove moves a piece
 func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPosition string) error {
-	// Validate move
-
 	m := &Move{
 		PlayerID: playerID,
 		Target:   target,
 		Source:   source,
 		Piece:    piece,
 	}
+
+	// TODO - validate move
+
 	g.Position = newPosition
 	g.Moves = append(g.Moves, m)
 
-	g.NotifyPlayers(&Message{
+	return g.NotifyPlayers(&Message{
 		Type: "move_made",
 		Data: &MessageData{
 			GameID:   g.ID,
@@ -137,8 +121,18 @@ func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPositio
 			Piece:    piece,
 		},
 	})
+}
 
-	return nil
+// NotifyAboutState notifies players about current game state
+func (g *Game) NotifyAboutState() error {
+	return g.NotifyPlayers(&Message{
+		Type: "state_update",
+		Data: &MessageData{
+			GameID:   g.ID,
+			Position: g.Position,
+			PlayerID: g.ActivePlayerID(),
+		},
+	})
 }
 
 func (g *Game) findOpponent(c *Client) *Client {

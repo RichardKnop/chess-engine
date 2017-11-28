@@ -150,9 +150,9 @@ func (c *Client) WritePump() error {
 
 func (c *Client) handleMessage(msg *Message) error {
 	handlers := map[string]func(msg *Message) error{
-		"find_game":  c.findGame,
-		"leave_game": c.leaveGame,
-		"make_move":  c.makeMove,
+		"find_game": c.findGame,
+		"get_game":  c.getGame,
+		"make_move": c.makeMove,
 	}
 
 	// Handle message based on its type
@@ -172,12 +172,12 @@ func (c *Client) findGame(msg *Message) error {
 	return g.Join(c, msg.Data.PlayerID, msg.Data.Orientation)
 }
 
-func (c *Client) leaveGame(msg *Message) error {
+func (c *Client) getGame(msg *Message) error {
 	g, err := c.engine.GetGame(msg.Data.GameID)
 	if err != nil {
 		return err
 	}
-	return g.Leave(c)
+	return g.NotifyAboutState()
 }
 
 func (c *Client) makeMove(msg *Message) error {

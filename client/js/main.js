@@ -13,7 +13,7 @@ var conn,
     cfg = {
         draggable: true,
         onDrop: function(source, target, piece, newPos, oldPos, orientation) {
-            if (!game.started || !game.myTurn) {
+            if (!game.started || !game.myTurn || (newPos === oldPos)) {
                 // http://chessboardjs.com/docs#config:onDrop
                 return 'snapback';
             }
@@ -78,15 +78,17 @@ function initWebsocket() {
                     appendLog('Game started.');
 
                     break;
-                case 'player_left':
-                    appendLog('Opponent left');
-                    break;
                 case 'move_made':
                     if (board.fen() !== msg.data['position']) {
                         board.position(msg.data['position']);
                         game.myTurn = !game.myTurn;
                     }
                     break;
+                case 'state_update':
+                    game.ID = msg.data['game_id'];
+
+                    board.position(msg.data['position']);
+                    game.myTurn = msg.data['player_id'] == player.ID;
             }
         }
     }
@@ -116,8 +118,15 @@ function initWebsocket() {
 }
 
 newGameBtn.addEventListener('click', function(evt) {
-    // Reset query string params
-    setQueryStringParams({});
+    // Reset game data
+    game = {
+            ID: null,
+            started: false,
+            myTurn: false,
+        },
+
+        // Reset query string params
+        setQueryStringParams({});
 
     var orientation = getOrientation();
 
@@ -182,13 +191,13 @@ function setOrientation(orientation) {
     }
 }
 
-function setQueryStringParams(params) {
+function setQueryStringParams(args) {
     if (history.pushState && 'URLSearchParams' in window) {
         var params = new URLSearchParams();
-        for (var key in params) {
-            params.set(key, params[key]);
+        for (var key in args) {
+            params.set(key, args[key]);
         }
-        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + params.toString();
+        var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + params.toString();
         window.history.pushState({ path: newurl }, '', newurl);
     }
 }
