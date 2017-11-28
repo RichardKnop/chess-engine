@@ -43,8 +43,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	client := engine.NewClient(conn)
 
 	go func() {
-		if err := client.ReadPump(); err != nil {
-			log.Print("Read pump error: ", err)
+		var loop = true
+		for loop {
+			if err := client.ReadPump(); err != nil {
+				log.Print("Read pump error: ", err)
+			} else {
+				loop = false
+			}
 		}
 	}()
 

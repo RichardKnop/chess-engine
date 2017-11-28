@@ -19,9 +19,9 @@ type Message struct {
 
 // MessageData ...
 type MessageData struct {
-	Orientation string `json:"orientation"`
 	Position    string `json:"position"`
 	GameID      string `json:"game_id"`
+	Orientation string `json:"orientation,omitempty"`
 	PlayerID    string `json:"player_id,omitempty"`
 	Source      string `json:"source,omitempty"`
 	Target      string `json:"target,omitempty"`

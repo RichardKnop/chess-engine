@@ -34,6 +34,8 @@ var conn,
     };
 
 function initWebsocket() {
+    console.log("Player ID: ", player.ID);
+
     var wsHost = 'localhost:8080',
         socket = new ReconnectingWebSocket('ws://' + wsHost + '/ws');
 
@@ -41,6 +43,9 @@ function initWebsocket() {
         console.log('Connection established');
 
         if (game.ID) {
+            var orientation = getOrientation();
+            setOrientation(orientation);
+
             conn.send(JSON.stringify({
                 type: 'get_game',
                 data: {
@@ -69,25 +74,29 @@ function initWebsocket() {
             console.log(msg);
 
             switch (msg.type) {
-                case 'game_started':
-                    // Store game ID
+                case 'state_update':
+                    if (!board) {
+                        board = ChessBoard('board', cfg);
+                    }
+
                     game.ID = msg.data['game_id'];
 
                     // Append game ID to URL
-                    setQueryStringParams({ 'game_id': game.ID });
+                    setQueryStringParams({ 'game_id': game.ID, 'orientation': cfg.orientation });
 
-                    // Set starting board position
-                    board.position(msg.data['position']);
+                    // Set game.myTurn
+                    game.myTurn = msg.data['player_id'] == player.ID;
 
-                    // Set game.started flag to true, also set game.myTurn to true 
-                    // if playing with white pieces 
-                    game.started = true;
-                    if (cfg.orientation === 'white') {
-                        game.myTurn = true;
+                    break;
+                case 'game_started':
+                    if (!game.started) {
+                        game.started = true;
+
+                        // Set board position
+                        board.position(msg.data['position']);
+
+                        appendLog('Game started.');
                     }
-
-                    appendLog('Game started.');
-
                     break;
                 case 'move_made':
                     if (board.fen() !== msg.data['position']) {
@@ -95,11 +104,6 @@ function initWebsocket() {
                         game.myTurn = !game.myTurn;
                     }
                     break;
-                case 'state_update':
-                    game.ID = msg.data['game_id'];
-
-                    board.position(msg.data['position']);
-                    game.myTurn = msg.data['player_id'] == player.ID;
             }
         }
     }
@@ -120,26 +124,16 @@ function initWebsocket() {
 newGameBtn.addEventListener('click', function(evt) {
     // Reset game data
     game = {
-            ID: null,
-            started: false,
-            myTurn: false,
-        },
+        ID: null,
+        started: false,
+        myTurn: false,
+    }
 
-        // Reset query string params
-        setQueryStringParams({});
+    // Reset query string params
+    setQueryStringParams({});
 
     var orientation = getOrientation();
-
-    // Choose orientation randomly if not specified by user
-    if (orientation === undefined) {
-        if (Math.floor(Math.random() * 2) > 0) {
-            orientation = 'black';
-        } else {
-            orientation = 'white';
-        }
-    }
     setOrientation(orientation);
-    cfg.orientation = orientation;
 
     board = ChessBoard('board', cfg);
 
@@ -172,16 +166,30 @@ function appendLog(msg) {
 }
 
 function getOrientation() {
+    // First look in the query string
+    var param = getQueryStringParam('orientation');
+    if (param) {
+        return param;
+    }
+
+    // Second, look at radio buttons
     var radios = document.getElementsByName('orientation')
     for (var i = 0, length = radios.length; i < length; i++) {
         if (radios[i].checked) {
             return radios[i].value;
         }
     }
-    return undefined;
+
+    // Finally, choose orientation randomly if not specified by user
+    if (Math.floor(Math.random() * 2) > 0) {
+        return 'black';
+    }
+    return 'white';
 }
 
 function setOrientation(orientation) {
+    cfg.orientation = orientation;
+
     var radios = document.getElementsByName('orientation')
     for (var i = 0, length = radios.length; i < length; i++) {
         if (radios[i].value === orientation && !radios[i].checked) {

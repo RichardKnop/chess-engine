@@ -22,7 +22,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	//maxMessageSize = 512
+	maxMessageSize = 512
 )
 
 var (
@@ -32,7 +32,8 @@ var (
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
-	PlayerID string
+	PlayerID    string
+	Orientation string
 
 	// The websocket connection.
 	conn *websocket.Conn
@@ -72,9 +73,13 @@ func (c *Client) ReadPump() (err error) {
 			}
 		}
 
-		c.conn.Close()
 		c.engine.ClientDisconnected(c)
+		c.conn.Close()
 	}()
+
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 	for {
 		// Read the message from the websocket
@@ -84,23 +89,26 @@ func (c *Client) ReadPump() (err error) {
 				err = fmt.Errorf("Unexpected close error: %v", e)
 				return
 			}
+			break
 		}
 
-		data = bytes.TrimSpace(bytes.Replace(data, newline, space, -1))
+		message := bytes.TrimSpace(bytes.Replace(data, newline, space, -1))
 
 		// Unmarshal the message
 		msg := new(Message)
-		if json.Unmarshal(data, msg) != nil {
+		if json.Unmarshal(message, msg) != nil {
 			continue
 		}
 
 		// Log the received message
-		log.Printf("Received message: %s", data)
+		log.Printf("Received message: %s", message)
 
 		if e := c.handleMessage(msg); e != nil {
 			log.Printf("Error handling message: %v", e)
 		}
 	}
+
+	return
 }
 
 // WritePump pumps messages from the engine/hub to the websocket connection.
@@ -110,20 +118,15 @@ func (c *Client) ReadPump() (err error) {
 // executing all writes from this goroutine.
 func (c *Client) WritePump() error {
 	ticker := time.NewTicker(pingPeriod)
+
 	defer func() {
 		ticker.Stop()
 		c.conn.Close()
-
-		c.engine.ClientDisconnected(c)
 	}()
+
 	for {
 		select {
 		case message, ok := <-c.send:
-			// Skip empty messages
-			if len(message) == 0 {
-				continue
-			}
-
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
@@ -157,6 +160,10 @@ func (c *Client) WritePump() error {
 }
 
 func (c *Client) handleMessage(msg *Message) error {
+	if msg.Data.PlayerID != "" {
+		c.PlayerID = msg.Data.PlayerID
+	}
+
 	handlers := map[string]func(msg *Message) error{
 		"find_game": c.findGame,
 		"get_game":  c.getGame,
@@ -178,8 +185,17 @@ func (c *Client) findGame(msg *Message) error {
 		return err
 	}
 
-	if err := g.Join(c, msg.Data.PlayerID, msg.Data.Orientation); err != nil {
+	if err := g.Join(c, msg.Data.Orientation); err != nil {
 		return err
+	}
+
+	if err := g.NotifyGameState(); err != nil {
+		return err
+	}
+
+	if len(g.GetPlayers()) == 2 && !g.Started {
+		g.Started = true
+		return g.NotifyGameStarted()
 	}
 
 	return nil
@@ -191,11 +207,19 @@ func (c *Client) getGame(msg *Message) error {
 		return err
 	}
 
-	if err := g.Join(c, msg.Data.PlayerID, msg.Data.Orientation); err != nil {
+	if err := g.Join(c, msg.Data.Orientation); err != nil {
 		return err
 	}
 
-	return g.NotifyAboutState()
+	if err := g.NotifyGameState(); err != nil {
+		return err
+	}
+
+	if len(g.GetPlayers()) == 2 {
+		return g.NotifyGameStarted()
+	}
+
+	return nil
 }
 
 func (c *Client) makeMove(msg *Message) error {

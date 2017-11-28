@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 )
 
@@ -15,7 +16,8 @@ type Move struct {
 
 // Game represents a game of chess
 type Game struct {
-	ID string
+	ID      string
+	Started bool
 	// FEM position string
 	Position string
 	// Sequence of all the moves played
@@ -45,29 +47,17 @@ func NewGame(gameID, position string) (*Game, error) {
 }
 
 // Join is called when a player joins the game
-func (g *Game) Join(c *Client, playerID, orientation string) error {
-	c.PlayerID = playerID
-
+func (g *Game) Join(c *Client, orientation string) error {
 	switch orientation {
 	case OrientationWhite:
 		g.White = c
 	case OrientationBlack:
 		g.Black = c
+	default:
+		return fmt.Errorf("Invalid orientation: %s", orientation)
 	}
 
 	log.Printf("Player %s joined game %s playing with %s pieces", c.PlayerID, g.ID, orientation)
-
-	if len(g.GetPlayers()) == 2 {
-		msg := &Message{
-			Type: "game_started",
-			Data: &MessageData{
-				GameID:   g.ID,
-				Position: g.Position,
-				PlayerID: c.PlayerID,
-			},
-		}
-		g.notifyPlayers(msg)
-	}
 
 	return nil
 }
@@ -114,8 +104,20 @@ func (g *Game) MakeMove(playerID, source, target, piece, oldPosition, newPositio
 	return g.notifyPlayers(msg)
 }
 
-// NotifyAboutState notifies players about current game state
-func (g *Game) NotifyAboutState() error {
+// NotifyGameStarted notifies players the game has started
+func (g *Game) NotifyGameStarted() error {
+	msg := &Message{
+		Type: "game_started",
+		Data: &MessageData{
+			GameID:   g.ID,
+			Position: g.Position,
+		},
+	}
+	return g.notifyPlayers(msg)
+}
+
+// NotifyGameState notifies players about current game state
+func (g *Game) NotifyGameState() error {
 	msg := &Message{
 		Type: "state_update",
 		Data: &MessageData{
@@ -143,12 +145,14 @@ func (g *Game) GetPlayers() []*Client {
 
 // getActivePlayerID returns player ID of a player who is on the move currently
 func (g *Game) getActivePlayerID() *string {
-	if len(g.Moves)/2 == 0 && g.White != nil {
+	if len(g.Moves)%2 == 0 && g.White != nil {
 		return &g.White.PlayerID
 	}
-	if len(g.Moves)/2 == 1 && g.Black != nil {
+
+	if len(g.Moves)%2 == 1 && g.Black != nil {
 		return &g.Black.PlayerID
 	}
+
 	return nil
 }
 
