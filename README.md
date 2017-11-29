@@ -1,2 +1,2 @@
-# chess-game
-Websockets chess game
+# chess-engine
+Websockets chess engine & game
